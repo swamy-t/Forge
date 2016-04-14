@@ -734,14 +734,16 @@ trait StreamOps {
         List(
           ("outFile", MString),
           ("inDelim", MString, "unit(\"\\s+\")"), // input delimiter is a regular expression
-          ("outDelim", MString, "unit(\"    \")") // output delimiter is an ordinary string
+          ("outDelim", MString, "unit(\"    \")"), // output delimiter is an ordinary string
+          ("trim", MBoolean, "unit(true)")
         ),
         List(
           ("func", DenseVector(MString) ==> DenseVector(R))
         )), FileStream), TStringable(R), addTpePars = R) implements composite ${
 
         $self.map(outFile, preserveOrder = true) { line =>
-          val tokens: Rep[ForgeArray[String]] = line.trim.fsplit(inDelim, -1) // we preserve trailing empty values
+          val input = if (trim) line.trim else line
+          val tokens: Rep[ForgeArray[String]] = input.fsplit(inDelim, -1) // we preserve trailing empty values
           val tokenVector: Rep[DenseVector[String]] = densevector_fromarray(tokens, true)
           // val outRow: Rep[DenseVector[String]] = func(tokenVector) map { e => e.makeStr }
           // val outLine: Rep[String] = array_mkstring(densevector_raw_data(outRow), outDelim)
@@ -761,6 +763,7 @@ trait StreamOps {
         List(
           ("outTable", MString),
           ("delim", MString, "unit(\"\\s+\")"),   // input delimiter is a regular expression
+          ("trim", MBoolean, "unit(true)"),
           ("appendToHash", MBoolean, "unit(false)")
         ),
         List(
@@ -783,7 +786,8 @@ trait StreamOps {
         val hash = HashStream[DenseMatrix[Double]](outTable, hashMatrixDeserializer)
 
         $self.processFileChunks({ (line, location) =>
-          val tokens: Rep[ForgeArray[String]] = line.trim.fsplit(delim, -1) // we preserve trailing empty values
+          val input = if (trim) line.trim else line
+          val tokens: Rep[ForgeArray[String]] = input.fsplit(delim, -1) // we preserve trailing empty values
           val tokenVector: Rep[DenseVector[String]] = densevector_fromarray(tokens, true)
           val key: Rep[String] = keyFunc(tokenVector)
           val value: Rep[DenseVector[Double]] = valFunc(tokenVector)
@@ -825,6 +829,7 @@ trait StreamOps {
         List(
           ("outTable", MString),
           ("delim", MString, "unit(\"\\s+\")"),   // input delimiter is a regular expression
+          ("trim", MBoolean, "unit(true)"),
           ("createTable", MBoolean, "unit(false)"),
           ("provision", Tup2(MInt,MInt), "tup2_pack((unit(1),unit(1)))")
         ),
@@ -851,7 +856,8 @@ trait StreamOps {
         val t = dhash_launch_background_writer_internal(dhash_get_db_safe(hash), queue)
 
         $self.processFileChunks({ (line, location) =>
-          val tokens: Rep[ForgeArray[String]] = line.trim.fsplit(delim, -1) // we preserve trailing empty values
+          val input = if (trim) line.trim else line
+          val tokens: Rep[ForgeArray[String]] = input.fsplit(delim, -1) // we preserve trailing empty values
           val tokenVector: Rep[DenseVector[String]] = densevector_fromarray(tokens, true)
           val key: Rep[String] = keyFunc(tokenVector)
           val value: Rep[DenseVector[Double]] = valFunc(tokenVector)
