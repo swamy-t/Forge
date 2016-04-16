@@ -65,12 +65,19 @@ trait StreamCorrectLarge extends ForgeTestModule with OptiMLApplication {
 /* Reading and writing the same filename in the same app is not supported, as the order of operations is not guaranteed */
 
 trait StreamSuitePaths {
+  // In order to run AWS tests, the following environment variables should be set:
+  // AWS_DEFAULT_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_KMS_KEY_PATH
+  val runAWSTests = System.getProperty("optiml.tests.run.aws", "false").toBoolean
+
   val testMat = "test.mat"
   val testMat2 = "test2.mat"
   val testMat3 = "test3.mat"
   val testHash1 = "test1.hash"
   val testHash2 = "test2.hash"
+  val testDHash1 = "test1"
+  val testDHash2 = "test2"
   val testHashStreamMat = "test_hash_stream.mat"
+  val testDHashStreamMat = "test_dhash_stream.mat"
   val testHashInMemMat = "test_hash_inmem.mat"
 }
 
@@ -216,6 +223,43 @@ trait HashStreamWriteB extends ForgeTestModule with OptiMLApplication with Strea
     accounts.close()
   }
 
+  def writeDStream() = {
+    val raw = FileStream(testMat)
+    val data = raw.mapRows(testMat2, "\\|", "|") { v => DenseVector(v(0).toDouble, v(1).toDouble, v(5).toDouble, v(7).toDouble, v(9).toDouble) }
+
+    // Set stream chunk byteSize to be small, so that we test HashStreams with multiple chunks
+    val p = System.getProperties()
+    p.setProperty("optiml.stream.chunk.bytesize", "1e4") // 1KB
+    p.setProperty("optiml.stream.dynamodb.threads","4") // reduce concurrent threads to prevent exception on low throughput tables
+    p.getProperty("optiml.stream.dynamodb.batchsize", "10")
+    p.getProperty("optiml.stream.dynamodb.queuesize", "100")
+    System.setProperties(p)
+
+    // There is some weirdness going in converting a double value to a string key here.
+    // We need to use a canonical representation of the double, so we use Scala's (rather than
+    // the formatted version we read from the file).
+    val customers = data.groupRowsByD(testDHash1, "\\|", createTable = true, provision = pack((unit(25),unit(25)))) (
+      row => ""+row(0).toDouble,
+      _.map(_.toDouble)
+    )
+    val accounts = data.groupRowsByD(testDHash2, "\\|", createTable = true, provision = pack((unit(25),unit(25)))) (
+      row => ""+row(1).toDouble,
+      _.map(_.toDouble)
+    )
+
+    val result = accounts.mapValues(testDHashStreamMat) { (acctId, account) =>
+      // account is looked up from the HashStream as a Rep[DenseMatrix[Double]] (the value in the bucket)
+      val custId = account(0, 0)
+      val customer = customers(""+custId)
+
+      DenseVector[Double](
+        customer.getCol(2).min,
+        customer.getCol(3).max,
+        customer.getCol(4).sort.sum
+      )
+    }
+  }
+
   def writeInMem() = {
     val data = readMatrixAndParse[Double](testMat, v => DenseVector(v(0).toDouble, v(1).toDouble, v(5).toDouble, v(7).toDouble, v(9).toDouble), "\\|")
 
@@ -240,6 +284,9 @@ trait HashStreamWriteB extends ForgeTestModule with OptiMLApplication with Strea
   def main() = {
     writeStream()
     writeInMem()
+    if (runAWSTests) {
+      writeDStream()
+    }
 
     // setup - testing occurs in subsequent phases
     collect(true)
@@ -261,6 +308,15 @@ trait HashStreamRead extends ForgeTestModule with OptiMLApplication with StreamS
     val sortedB = b(sortedBIndices)
 
     collect(sortedA == sortedB)
+
+    if (runAWSTests) {
+      val c = readMatrix(testDHashStreamMat)
+      val sortedCIndices = IndexVector((0::c.numRows).sortBy(i => c(i).sum))
+      val sortedC = c(sortedCIndices)
+      collect(sortedB == sortedC)
+    }
+
+    collect(true)
     mkReport
   }
 }
@@ -275,6 +331,9 @@ trait HashStreamDelete extends ForgeTestModule with OptiMLApplication with Strea
     deleteFile(testHash2)
     deleteFile(testHashStreamMat)
     deleteFile(testHashInMemMat)
+    if (runAWSTests) {
+      deleteFile(testDHashStreamMat)
+    }
 
     collect(true)
     mkReport

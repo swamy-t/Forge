@@ -26,6 +26,7 @@ trait StreamOps {
 
   def importStreamOps() {
     importHashStreamOps()
+    importDHashStreamOps()
     importFileStreamOps()
     importComputeStreamOps()
   }
@@ -252,9 +253,435 @@ trait StreamOps {
     }
   }
 
+  def importDHashStreamOps() {
+    val DHashStream = lookupTpe("DHashStream")
+    val FileStream = lookupTpe("FileStream")
+    val DenseVector = lookupTpe("DenseVector")
+    val ByteBuffer = tpe("java.nio.ByteBuffer")
+    val Tup2 = lookupTpe("Tup2")
+    val V = tpePar("V")
+    val R = tpePar("R")
+
+    // Unfortunately, we need to do a bit of our own application-level parallelism to
+    // enable reading a file and writing to DynamoDB asynchronously, which is required to
+    // maximize throughput.
+    importConcurrentQueue()
+    importThreads()
+    val CQueue = lookupTpe("java.util.concurrent.ArrayBlockingQueue")
+    val SThread = lookupTpe("java.lang.Thread")
+
+    val DB = tpe("com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper")
+    primitiveTpePrefix ::= "com.amazonaws"
+    val SecretKey = tpe("javax.crypto.spec.SecretKeySpec")
+    primitiveTpePrefix ::= "javax.crypto"
+
+    data(DHashStream, ("_table", MString), ("_key", SecretKey), ("_db", DB), ("_deserialize", MLambda(Tup2(DHashStream(V),MString), V)))
+
+    static (DHashStream) ("apply", V, (("table", MString), ("deserialize", (DHashStream(V),MString) ==> V)) :: DHashStream(V), effect = mutable) implements composite ${
+      val hash = dhash_alloc_raw[V](table, deserialize)
+      hash.open()
+      hash
+    }
+
+    compiler (DHashStream) ("dhash_alloc_raw", V, (("table", MString), ("deserialize", (DHashStream(V),MString) ==> V)) :: DHashStream(V), effect = mutable) implements
+      allocates(DHashStream, ${$0}, "unit(null.asInstanceOf[javax.crypto.spec.SecretKeySpec])", "unit(null.asInstanceOf[com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper])", ${doLambda((t: Rep[Tup2[DHashStream[V],String]]) => deserialize(t._1, t._2))})
+
+    // -- code generated internal methods interface with the embedded db
+
+    // We use simple effects in lieu of read / write effects because these are codegen nodes,
+    // so we cannot pass the struct to them (a limitation of Forge at the moment).
+
+    compiler (DHashStream) ("dhash_create_table_internal", Nil, (MString, MInt, MInt) :: MUnit, effect = simple) implements codegen($cala, ${
+      import com.amazonaws.services.dynamodbv2._
+      import com.amazonaws.services.dynamodbv2.util.Tables
+      import com.amazonaws.services.dynamodbv2.model._
+      import com.amazonaws.services.dynamodbv2.document._
+
+      try {
+        val client = new AmazonDynamoDBClient()
+        val regionName = sys.env.getOrElse("AWS_DYNAMO_REGION", sys.env.getOrElse("AWS_DEFAULT_REGION", "us-east-1"))
+        client.configureRegion(com.amazonaws.regions.Regions.fromName(regionName))
+
+        if (Tables.doesTableExist(client, $0)) {
+          println("[optiml stream]: deleting existing table " + $0)
+          val docClient = new DynamoDB(client)
+          val t = docClient.getTable($0)
+          t.delete()
+          t.waitForDelete()
+        }
+
+        // This corresponds to the schema in MLGlobalDynamo.scala.
+        val hashKey = new KeySchemaElement().withAttributeName("hashKey").withKeyType(KeyType.HASH)
+        val rangeKey = new KeySchemaElement().withAttributeName("rangeKey").withKeyType(KeyType.RANGE)
+        val throughput = new ProvisionedThroughput($1, $2)
+        val create = new CreateTableRequest()
+          .withTableName($0)
+          .withKeySchema(hashKey, rangeKey)
+          .withAttributeDefinitions(new AttributeDefinition("hashKey", ScalarAttributeType.S),
+                                    new AttributeDefinition("rangeKey", ScalarAttributeType.S))
+          .withProvisionedThroughput(throughput)
+
+        client.createTable(create)
+        println("[optiml stream]: created DynamoDB table " + $0 + " - waiting to become active")
+        Tables.awaitTableToBecomeActive(client, $0)
+        client.shutdown()
+      }
+      catch {
+        case e: Throwable =>
+          println("[optiml stream]: fatal error: failed to create table " + $0)
+          throw e
+      }
+    })
+
+    compiler (DHashStream) ("dhash_open_internal", Nil, MString :: DB, effect = simple) implements codegen($cala, ${
+      import com.amazonaws.services.dynamodbv2._
+      import com.amazonaws.services.dynamodbv2.datamodeling._
+
+      // TODO: Configure client for tuning options.
+      // see: http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/ClientConfiguration.html
+      val dynamoClient = new AmazonDynamoDBClient()
+      val regionName = sys.env.getOrElse("AWS_DYNAMO_REGION", sys.env.getOrElse("AWS_DEFAULT_REGION", "us-east-1"))
+      dynamoClient.configureRegion(com.amazonaws.regions.Regions.fromName(regionName))
+      val config = new DynamoDBMapperConfig.Builder().withTableNameOverride(DynamoDBMapperConfig.TableNameOverride.withTableNameReplacement($0)).withConsistentReads(DynamoDBMapperConfig.ConsistentReads.EVENTUAL).build()
+      new DynamoDBMapper(dynamoClient, config)
+    })
+
+    compiler (DHashStream) ("dhash_lookup_key_internal", Nil, Nil :: SecretKey, effect = simple) implements codegen($cala, ${
+      import com.amazonaws.services.kms._
+
+      val kmsClient = new AWSKMSClient()
+      val kmsRegion = sys.env.getOrElse("AWS_KMS_REGION", sys.env.getOrElse("AWS_DEFAULT_REGION", "us-east-1"))
+      kmsClient.configureRegion(com.amazonaws.regions.Regions.fromName(kmsRegion))
+
+      val s3Client = new com.amazonaws.services.s3.AmazonS3Client()
+      val s3Region = sys.env.getOrElse("AWS_S3_REGION", sys.env.getOrElse("AWS_DEFAULT_REGION", "us-east-1"))
+      s3Client.configureRegion(com.amazonaws.regions.Regions.fromName(s3Region))
+
+      val keyPath = sys.env.getOrElse("AWS_KMS_KEY_PATH", throw new RuntimeException("DHashStream: AWS_KMS_KEY_PATH is undefined"))
+      val bucketName = keyPath.takeWhile(_ != '/')
+      val keyName = keyPath.drop(bucketName.length + 1)
+
+      val inputStream = s3Client.getObject(bucketName, keyName).getObjectContent
+      val encryptedKey = new Array[Byte](256)
+      val encryptedSize = inputStream.read(encryptedKey)
+      assert(inputStream.read() == -1, "ERROR: S3 key contents larger than expected")
+      inputStream.close()
+
+      val decryptedKey = kmsClient.decrypt(new model.DecryptRequest().withCiphertextBlob(java.nio.ByteBuffer.wrap(encryptedKey, 0, encryptedSize))).getPlaintext.array
+      new javax.crypto.spec.SecretKeySpec(decryptedKey, "AES")
+    })
+
+    compiler (DHashStream) ("dhash_contains_internal", Nil, (DB, MString, MString) :: MBoolean, effect = simple) implements codegen($cala, ${
+      try {
+        // First version throws NPEs
+        // val query = (new com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBQueryExpression).withHashKeyValues(new KeyValue($1)).withSelect("COUNT").withLimit(1)
+        // $0.queryPage(classOf[KeyValue], query).getCount > 0
+        val query = (new com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBQueryExpression).withHashKeyValues(new KeyValue($1)).withLimit(1)
+        // TODO: investigate - debug log output claims that this is triggering consistentReads, but it shouldn't.
+        $0.count(classOf[KeyValue], query) > 0
+      }
+      catch {
+        case p: com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException =>
+          // We could increase the provision.. doing nothing for now
+          p.printStackTrace
+          println("[optiml stream]: failed to lookup key " + $1 + " from DynamoDB from " + $2 + " (returning false).")
+          false
+        case e: Throwable =>
+          println("[optiml stream]: caught unknown exception: " + e + " with " + $2 + " (returning false).")
+          false
+      }
+    })
+
+    compiler (DHashStream) ("dhash_get_internal", Nil, (DB, MString, MString) :: ByteBuffer, effect = simple) implements codegen($cala, ${
+      $0.load(classOf[KeyValue], $1, $2).value
+    })
+
+    compiler (DHashStream) ("dhash_get_all_internal", Nil, (DB, SecretKey, MString, MString) :: MArray(ByteBuffer), effect = simple) implements codegen($cala, ${
+      import javax.crypto._
+      val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+      val ivLength = 16
+
+      try {
+        val list = $0.query(classOf[KeyValue], (new com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBQueryExpression).withHashKeyValues(new KeyValue($2)))
+        if ((list == null) || list.isEmpty) {
+          null
+        }
+        else {
+          val res = new Array[java.nio.ByteBuffer](list.size)
+          var i = 0
+          var iter = list.iterator
+          while (i < list.size) {
+            val encrypted = iter.next.value
+
+            val iv = new Array[Byte](ivLength)
+            encrypted.get(iv)
+            val cipherText = new Array[Byte](encrypted.remaining)
+            encrypted.get(cipherText)
+            cipher.init(Cipher.DECRYPT_MODE, $1, new spec.IvParameterSpec(iv))
+            val decrypted = cipher.doFinal(cipherText)
+
+            val gzip = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(decrypted))
+            val decompressed = new java.io.ByteArrayOutputStream
+            val chunkSize = 1024
+            val buffer = new Array[Byte](chunkSize)
+            var length = 0
+            while (length != -1) {
+              decompressed.write(buffer, 0, length)
+              length = gzip.read(buffer, 0, chunkSize)
+            }
+            res(i) = java.nio.ByteBuffer.wrap(decompressed.toByteArray)
+            i += 1
+          }
+          res
+        }
+      }
+      catch {
+        case p: com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException =>
+          // Should application-level retry?
+          p.printStackTrace
+          println("[optiml stream]: failed to read key " + $2 + " from DynamoDB from " + $3 + " (returning null).")
+          null
+        case e: Throwable =>
+          println("[optiml stream]: caught unknown exception: " + e + " with " + $3 + " (returning null).")
+          null
+      }
+    })
+
+    compiler (DHashStream) ("dhash_put_internal", Nil, (DB, MString, MString, ByteBuffer) :: MUnit, effect = simple) implements codegen($cala, ${
+      $0.save(new KeyValue($1, $2, $3))
+    })
+
+    // We use a background thread to constantly push writes to DynamoDB from a queue that is filled by readers,
+    // as they process each file chunk. The input queue has a bounded size, so if readers race too far ahead
+    // of writers, the readers will block, preventing unbounded memory growth.
+    compiler (DHashStream) ("dhash_launch_background_writer_internal", Nil, (DB, CQueue(MAny)) :: SThread, effect = simple) implements codegen($cala, ${
+      val numThreads: Int = System.getProperty("optiml.stream.dynamodb.threads","128").toInt
+      val batchSize: Int = System.getProperty("optiml.stream.dynamodb.batchsize", "1000").toInt
+      val inputQueue = $1.asInstanceOf[java.util.concurrent.ArrayBlockingQueue[KeyValue]]
+      val workQueueSize = 100
+      val workQueue = new java.util.concurrent.ArrayBlockingQueue[Runnable](workQueueSize)
+      val pool = new java.util.concurrent.ThreadPoolExecutor(numThreads, numThreads, workQueueSize, java.util.concurrent.TimeUnit.SECONDS, workQueue)
+
+      // This thread will run forever until the process dies or it is interrupted!
+      val t = new Thread(new Runnable {
+        // Keep track of the current batch, so we can drain if interrupted.
+        var batchInProgress: java.util.ArrayList[KeyValue] = null
+
+        def submitOne(batch: java.util.ArrayList[KeyValue]) = new Runnable {
+          def run() = {
+            val failures = $0.batchSave(batch)
+            if (!failures.isEmpty) {
+              failures.get(0).getException.printStackTrace()
+            }
+          }
+        }
+
+        def block() { Thread.sleep(100) }
+
+        def drain() {
+          val batch = new java.util.ArrayList[KeyValue]()
+          if (batchInProgress != null) batch.addAll(batchInProgress)
+          inputQueue.drainTo(batch)
+          if (batch.size > 0) {
+            while (workQueue.size > workQueueSize-1) block()
+            pool.execute(submitOne(batch))
+          }
+          pool.shutdown()
+          while (!pool.isTerminated()) block()
+        }
+
+        def run(): Unit = {
+          while (true) {
+            try {
+              // Block if our pool is busy. This is necessary because the thread pool
+              // will reject tasks if the queue is full and no threads are available,
+              // rather than block.
+              while (workQueue.size > workQueueSize-1) block()
+
+              // Fill the next DynamoDB batch request (block if no data is ready)
+              val batch = new java.util.ArrayList[KeyValue]()
+              batchInProgress = batch
+              while (batch.size < batchSize) {
+                // Will block until the queue is ready
+                val e = inputQueue.take()
+                batch.add(e)
+              }
+
+              // Launch the request in an independent thread
+              try {
+                pool.execute(submitOne(batch))
+                batchInProgress = null
+              }
+              catch {
+                case e: java.util.concurrent.RejectedExecutionException => e.printStackTrace()
+              }
+            }
+            catch {
+              case e:InterruptedException => drain; return
+            }
+          }
+        }
+      })
+
+      t.start()
+      t
+    })
+
+    compiler (DHashStream) ("dhash_put_all_internal", Nil, MethodSignature(List(SecretKey, CQueue(MAny), MArray(MString), MArray(MString), MArray(MArray(MByte)), MInt), MUnit), effect = simple) implements codegen($cala, ${
+      import javax.crypto._
+
+      val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+
+      assert($2.length >= $5, "DHashStream putAll called with too small arrays")
+      val queue = $1.asInstanceOf[java.util.concurrent.ArrayBlockingQueue[KeyValue]]
+      var i = 0
+      while (i < $5) {
+        //compress values before sending
+        val compressed = new java.io.ByteArrayOutputStream
+        val gzip = new java.util.zip.GZIPOutputStream(compressed)
+        gzip.write($4(i))
+        gzip.finish()
+
+        cipher.init(Cipher.ENCRYPT_MODE, $0)
+        val iv = cipher.getParameters.getParameterSpec(classOf[spec.IvParameterSpec]).getIV
+        val encrypted = cipher.doFinal(compressed.toByteArray)
+
+        val kv = new KeyValue($2(i), $3(i), java.nio.ByteBuffer.wrap(iv ++ encrypted))
+        // Will block if the queue is already full
+        queue.put(kv)
+        i += 1
+      }
+      ()
+    })
+
+    compiler (DHashStream) ("dhash_keys_internal", Nil, DB :: MArray(MString)) implements codegen($cala, ${
+      val buf = new scala.collection.mutable.HashSet[String]
+
+      val scan = (new com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBScanExpression).withProjectionExpression("hashKey")
+      val result = $0.parallelScan(classOf[KeyValue], scan, 16)
+      val iter = result.iterator
+      while (iter.hasNext) {
+        buf += iter.next.hashKey
+      }
+      buf.toArray
+    })
+
+
+    // --
+
+    val DHashStreamOps = withTpe(DHashStream)
+    DHashStreamOps {
+      compiler ("dhash_deserialize") (Nil :: MLambda(Tup2(DHashStream(V),MString), V)) implements getter(0, "_deserialize")
+      compiler ("dhash_table_name") (Nil :: MString) implements getter(0, "_table")
+      compiler ("dhash_get_db") (Nil :: DB) implements getter(0, "_db")
+      compiler ("dhash_set_db") (DB :: MUnit, effect = write(0)) implements setter(0, "_db", ${$1})
+      compiler ("dhash_get_key") (Nil :: SecretKey) implements getter(0, "_key")
+      compiler ("dhash_set_key") (SecretKey :: MUnit, effect = write(0)) implements setter(0, "_key", ${$1})
+
+      compiler ("dhash_get_db_safe") (Nil :: DB) implements composite ${
+        val db = dhash_get_db($self)
+        fassert(db != null, "No DB opened in DHashStream")
+        db
+      }
+
+      infix ("open") (Nil :: MUnit, effect = write(0)) implements single ${
+        val table = dhash_table_name($self)
+        val db = dhash_open_internal(table)
+        dhash_set_db($self, db)
+        val key = dhash_lookup_key_internal()
+        dhash_set_key($self, key)
+      }
+
+      infix ("apply") (MString :: V) implements composite ${
+        val lambda = dhash_deserialize($self)
+        doApply(lambda, pack(($self,$1)))
+      }
+
+      //TODO: can we reconcile the type signatures for the different DHashStream apis
+      //e.g., need to pick either Array[Byte] or ByteBuffer, etc.
+
+      // This may be too inefficient, since a subsequent get has to hit the hash again.
+      // However, if it's cached, it should be fine.
+      infix ("contains") (MString :: MBoolean) implements single ${
+        dhash_contains_internal(dhash_get_db_safe($self), $1, dhash_table_name($self))
+      }
+
+      infix ("keys") (Nil :: MArray(MString)) implements single ${
+        dhash_keys_internal(dhash_get_db_safe($self))
+      }
+
+      infix ("get") ((MString, MString) :: ByteBuffer) implements single ${
+        dhash_get_internal(dhash_get_db_safe($self), $1, $2)
+      }
+
+      infix ("put") ((MString, MString, ByteBuffer) :: MUnit, effect = write(0)) implements single ${
+        dhash_put_internal(dhash_get_db_safe($self), $1, $2, $3)
+      }
+
+      //get all values associated with the supplied logical key (prefix)
+      infix ("getAll") (MString :: MArray(ByteBuffer)) implements single ${
+        dhash_get_all_internal(dhash_get_db_safe($self), dhash_get_key($self), $1, dhash_table_name($self))
+      }
+
+      infix ("putAll") ((CQueue(MAny), MArray(MString), MArray(MString), MArray(MArray(MByte)), MInt) :: MUnit, effect = write(0)) implements composite ${
+        dhash_put_all_internal(dhash_get_key($self), $1, $2, $3, $4, $5)
+      }
+
+      infix ("close") (Nil :: MUnit, effect = write(0)) implements single ${
+        dhash_set_db($self, unit(null.asInstanceOf[com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper]))
+      }
+
+
+      // -- bulk
+
+      infix ("mapValues") (CurriedMethodSignature(List(
+        List(
+          ("outFile", MString),
+          ("outDelim", MString, "unit(\"    \")") // output delimiter is an ordinary string
+        ),
+        List(
+          ("func", (MString,V) ==> DenseVector(R))
+        )), FileStream), TStringable(R), addTpePars = R) implements composite ${
+
+        // Delete destination if it exists
+        deleteFile(outFile)
+
+        // This requires 2 passes (one to get the keys, the next to process the values),
+        // because we cannot call our deserialize function from within a codegen method.
+        val lambda = dhash_deserialize($self)
+        val keys = $self.keys
+
+        // Performance is particularly sensitive to chunkSize because currently this function is very susceptible to load
+        // balance issues (i.e. some keys are associated with much more data and therefore execution time). We should address
+        // this by computing key sizes ahead-of-time and then splitting the work in a more balanced way.
+        val chunkSize = 10000000 // getting better results with a constant, for now. this is highly dependent on the application.
+        // val chunkSize = (getChunkByteSize / 1000).toInt // number of keys to process in parallel. assume each key holds ~1KB.
+
+        val numChunks = ceil(keys.length.toDouble / chunkSize)
+        var i = 0
+        var keysProcessed = 0
+        while (i < numChunks) {
+          // process remainder if we're the last chunk
+          val processSize: Rep[Int] = if (i == numChunks - 1) keys.length - keysProcessed else chunkSize
+          val vecs = array_fromfunction(processSize, i => func(keys(keysProcessed+i), doApply(lambda, pack(($self,keys(keysProcessed+i))))))
+          val writeArray = array_filter(vecs, (e: Rep[DenseVector[R]]) => e.length > 0)
+          ForgeFileWriter.writeLines(outFile, writeArray.length, append = true) { i =>
+            val v = writeArray(i)
+            array_mkstring(v.toArray, outDelim)
+          }
+          keysProcessed += chunkSize
+          i += 1
+        }
+
+        FileStream(outFile)
+      }
+    }
+  }
+
   def importFileStreamOps() {
     val FileStream = lookupTpe("FileStream")
     val HashStream = lookupTpe("HashStream")
+    val DHashStream = lookupTpe("DHashStream")
     val DenseVector = lookupTpe("DenseVector")
     val DenseMatrix = lookupTpe("DenseMatrix")
     val Tup2 = lookupTpe("Tup2")
@@ -288,6 +715,32 @@ trait StreamOps {
           fassert(numCols0 == numCols, "hashMatrixDeserializer: expected " + numCols0 + " cols for row " + i + ", but found " + numCols)
           val dst = densematrix_raw_data(out).unsafeMutable // array_update gets rewritten, but not the write below
           rowBuffer.unsafeImmutable.get(dst, i*numCols, numCols) // write directly to underlying matrix
+          i += 1
+        }
+
+        out.unsafeImmutable
+      }
+    }
+
+    direct (FileStream) ("hashMatrixDeserializerD", Nil, (("hash", DHashStream(DenseMatrix(MDouble))), ("k", MString)) :: DenseMatrix(MDouble)) implements composite ${
+      val rows = hash.getAll(k)
+      if (rows == null) {
+        unit(null).AsInstanceOf[DenseMatrix[Double]]
+      }
+      else {
+        val numRows = rows.length
+        val rowBuffer = rows(0)
+        val numCols0 = rowBuffer.getInt()
+        val out = DenseMatrix[Double](numRows, numCols0)
+        val dst = densematrix_raw_data(out).unsafeMutable // array_update gets rewritten, but not the write below
+        rowBuffer.unsafeImmutable.get(dst, 0, numCols0) // write directly to underlying matrix
+
+        var i = 1
+        while (i < numRows) {
+          val rowBuffer = rows(i)
+          val numCols = rowBuffer.getInt()
+          fassert(numCols0 == numCols, "hashMatrixDeserializer: expected " + numCols0 + " cols, but found " + numCols)
+          rowBuffer.unsafeImmutable.get(dst, i*numCols, numCols)
           i += 1
         }
 
@@ -484,6 +937,63 @@ trait StreamOps {
           hash.putAll(dbKeyPrefix, dbKeySuffix, dbValues, dbKeyPrefix.length)
         })
 
+        hash
+      }
+
+      /**
+       * Returns a DHashStream (backed by DynamoDB). If createTable = true, the table will be
+       * deleted if it already exists. Use with caution!
+       *
+       * FIXME: refactor (unfortunate duplication for HashStream variants)
+       */
+      infix ("groupRowsByD") (CurriedMethodSignature(List(
+        List(
+          ("outTable", MString),
+          ("delim", MString, "unit(\"\\s+\")"),   // input delimiter is a regular expression
+          ("createTable", MBoolean, "unit(false)"),
+          ("provision", Tup2(MInt,MInt), "tup2_pack((unit(1),unit(1)))")
+        ),
+        List(
+          ("keyFunc", DenseVector(MString) ==> MString),
+          ("valFunc", DenseVector(MString) ==> DenseVector(MDouble))
+        )), DHashStream(DenseMatrix(MDouble)))) implements composite ${
+
+        def serialize(v: Rep[DenseVector[Double]]): Rep[ForgeArray[Byte]] = {
+          val x = ByteBuffer(4+8*v.length)
+          x.putInt(v.length)
+          x.put(v.toArray, 0, v.length)
+          x.unsafeImmutable.array
+        }
+
+        val hash = DHashStream[DenseMatrix[Double]](outTable, hashMatrixDeserializerD)
+        if (createTable) {
+          dhash_create_table_internal(outTable, provision._1, provision._2)
+        }
+
+        // Launch background writer thread with 10M capacity queue
+        val queueSize: Int = System.getProperty("optiml.stream.dynamodb.queuesize", "10000000").toInt
+        val queue = CQueue[Any](queueSize)
+        val t = dhash_launch_background_writer_internal(dhash_get_db_safe(hash), queue)
+
+        $self.processFileChunks({ (line, location) =>
+          val tokens: Rep[ForgeArray[String]] = line.trim.fsplit(delim, -1) // we preserve trailing empty values
+          val tokenVector: Rep[DenseVector[String]] = densevector_fromarray(tokens, true)
+          val key: Rep[String] = keyFunc(tokenVector)
+          val value: Rep[DenseVector[Double]] = valFunc(tokenVector)
+          pack((key, value, location))
+        },
+        { (a: Rep[ForgeArray[Tup3[String,DenseVector[Double],String]]]) =>
+
+          val chunk = densevector_fromarray(a, true).filter(t => t._2.length > 0)
+          val dbKeyPrefix: Rep[ForgeArray[String]] = chunk.map(t => t._1).toArray
+          val dbKeySuffix: Rep[ForgeArray[String]] = chunk.map(t => t._3).toArray
+          val dbValues: Rep[ForgeArray[ForgeArray[Byte]]] = chunk.map(t => serialize(t._2)).toArray
+
+          hash.putAll(queue, dbKeyPrefix, dbKeySuffix, dbValues, dbKeyPrefix.length)
+        })
+
+        t.interrupt()
+        t.join()
         hash
       }
 
