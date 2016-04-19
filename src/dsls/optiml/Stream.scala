@@ -829,6 +829,7 @@ trait StreamOps {
         List(
           ("outTable", MString),
           ("delim", MString, "unit(\"\\s+\")"),   // input delimiter is a regular expression
+          ("trim", MBoolean, "unit(true)"),
           ("createTable", MBoolean, "unit(false)"),
           ("provision", Tup2(MInt,MInt), "tup2_pack((unit(1),unit(1)))")
         ),
@@ -855,7 +856,8 @@ trait StreamOps {
         val t = dhash_launch_background_writer_internal(dhash_get_db_safe(hash), queue)
 
         $self.processFileChunks({ (line, location) =>
-          val tokens: Rep[ForgeArray[String]] = line.trim.fsplit(delim, -1) // we preserve trailing empty values
+          val input = if (trim) line.trim else line
+          val tokens: Rep[ForgeArray[String]] = input.fsplit(delim, -1) // we preserve trailing empty values
           val tokenVector: Rep[DenseVector[String]] = densevector_fromarray(tokens, true)
           val key: Rep[String] = keyFunc(tokenVector)
           val value: Rep[DenseVector[Double]] = valFunc(tokenVector)
