@@ -39,6 +39,7 @@ trait OptiMLDSL extends OptiLADSL
     importSetOps()
     importTrainingSetLikeOps()
     importByteBuffer()
+    importKeyValueStoreOps()
     extern(grp("Sum"))
     importBufferableOps()
     importFeatureOps()
