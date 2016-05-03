@@ -306,6 +306,7 @@ trait HashStreamRead extends ForgeTestModule with OptiMLApplication with StreamS
     val sortedBIndices = IndexVector((0::b.numRows).sortBy(i => b(i).sum))
     val sortedA = a(sortedAIndices)
     val sortedB = b(sortedBIndices)
+
     collect(sortedA == sortedB)
 
     if (runAWSTests) {
@@ -315,6 +316,26 @@ trait HashStreamRead extends ForgeTestModule with OptiMLApplication with StreamS
       collect(sortedB == sortedC)
     }
 
+    collect(true)
+    mkReport
+  }
+}
+
+object HashStreamDeleteRunnerC extends OptiMLApplicationCompiler with ForgeTestRunnerCompiler with HashStreamDelete
+object HashStreamDeleteRunnerI extends OptiMLApplicationInterpreter with ForgeTestRunnerInterpreter with HashStreamDelete
+trait HashStreamDelete extends ForgeTestModule with OptiMLApplication with StreamSuitePaths {
+  def main() = {
+    deleteFile(testMat)
+    deleteFile(testMat2)
+    deleteFile(testHash1)
+    deleteFile(testHash2)
+    deleteFile(testHashStreamMat)
+    deleteFile(testHashInMemMat)
+    if (runAWSTests) {
+      deleteFile(testDHashStreamMat)
+    }
+
+    collect(true)
     mkReport
   }
 }
@@ -342,33 +363,14 @@ class StreamSuiteInterpreter extends ForgeSuiteInterpreter {
   def testStreamForeach() { runTest(StreamForeachRunnerI) }
   def testStreamCorrectSmall() { runTest(StreamCorrectSmallRunnerI) }
   def testStreamCorrectLarge() { runTest(StreamCorrectLargeRunnerI) }
-  def testFileStream() {
-    runTest(FileStreamWriteARunnerI)
-    runTest(FileStreamWriteBRunnerI)
-    runTest(FileStreamReadRunnerI)
-    runTest(FileStreamDeleteRunnerI)
-  }
-  def testHashStream() {
-    runTest(HashStreamWriteARunnerI)
-    runTest(HashStreamWriteBRunnerI)
-    runTest(HashStreamReadRunnerI)
-    runTest(HashStreamDeleteRunnerI)
-  }
+  def testFileStream() { runTests(FileStreamWriteARunnerI, FileStreamWriteBRunnerI, FileStreamReadRunnerI, FileStreamDeleteRunnerI) }
+  def testHashStream() { runTests(HashStreamWriteARunnerI,HashStreamWriteBRunnerI,HashStreamReadRunnerI,HashStreamDeleteRunnerI) }
 }
 class StreamSuiteCompiler extends ForgeSuiteCompiler {
+  override def enforceFullCoverage = false
   def testStreamForeach() { runTest(StreamForeachRunnerC) }
   def testStreamCorrectSmall() { runTest(StreamCorrectSmallRunnerC) }
   def testStreamCorrectLarge() { runTest(StreamCorrectLargeRunnerC) }
-  def testFileStream() {
-    runTest(FileStreamWriteARunnerC)
-    runTest(FileStreamWriteBRunnerC)
-    runTest(FileStreamReadRunnerC)
-    runTest(FileStreamDeleteRunnerC)
-  }
-  def testHashStream() {
-    runTest(HashStreamWriteARunnerC)
-    runTest(HashStreamWriteBRunnerC)
-    runTest(HashStreamReadRunnerC)
-    runTest(HashStreamDeleteRunnerC)
-  }
+  def testFileStream() { runTests(FileStreamWriteARunnerC, FileStreamWriteBRunnerC, FileStreamReadRunnerC, FileStreamDeleteRunnerC) }
+  def testHashStream() { runTests(HashStreamWriteARunnerC, HashStreamWriteBRunnerC, HashStreamReadRunnerC, HashStreamDeleteRunnerC) }
 }

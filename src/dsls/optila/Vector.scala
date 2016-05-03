@@ -250,8 +250,8 @@ trait VectorOps {
       val MinT = if (isTpePar(T)) "implicitly[HasMinMax[T]].min" else "implicitly[HasMinMax["+TT+"]].min"
       val MaxT = if (isTpePar(T)) "implicitly[HasMinMax[T]].max" else "implicitly[HasMinMax["+TT+"]].max"
 
-      infix ("min") (Nil :: T, O ::: H) implements reduce(T, 0, MinT, ${ (a,b) => if (a < b) a else b })
-      infix ("max") (Nil :: T, O ::: H) implements reduce(T, 0, MaxT, ${ (a,b) => if (a > b) a else b })
+      infix ("min") (Nil :: T, O ::: H) implements reduce(T, 0, MaxT, ${ (a,b) => if (a < b) a else b })
+      infix ("max") (Nil :: T, O ::: H) implements reduce(T, 0, MinT, ${ (a,b) => if (a > b) a else b })
 
       infix ("minIndex") (Nil :: MInt, O) implements composite ${ min_index_of($self.indices, $self) }
       infix ("maxIndex") (Nil :: MInt, O) implements composite ${ max_index_of($self.indices, $self) }
@@ -264,6 +264,7 @@ trait VectorOps {
       infix ("reduce") (((T,T) ==> T) :: T, A) implements reduce(T, 0, Z, ${ (a,b) => $1(a,b) })
       infix ("foreach") ((T ==> MUnit) :: MUnit) implements foreach(T, 0, ${ e => $1(e) })
       infix ("forall") ((T ==> MBoolean) :: MBoolean) implements composite ${ reduce_and($self.map($1)) }
+      infix ("exists") ((T ==> MBoolean) :: MBoolean) implements composite ${ $self.filter($1).length > 0 }
       infix ("find") ((T ==> MBoolean) :: IndexVector) implements composite ${ $self.indices.filter(i => $1($self(i))) }
 
       val filterMap = v.name.toLowerCase + "_densevector_filter_map"

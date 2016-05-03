@@ -180,7 +180,7 @@ trait ScalaOps extends PrimitiveMathGen {
   def importMisc() = {
     val Misc = grp("Misc")
 
-    val exit = direct (Misc) ("exit", Nil, MInt :: MUnit, effect = simple)
+    val exit = direct (Misc) ("exit", Nil, MInt :: MNothing, effect = simple)
     impl (exit) (codegen($cala, ${sys.exit($0)}))
 
     val print = direct (Misc) ("print", Nil, MAny :: MUnit, effect = simple)
@@ -318,8 +318,14 @@ trait ScalaOps extends PrimitiveMathGen {
     infix (Ord) ("!=", (AC,B), (AC,B) :: MBoolean) implements redirect ${ forge_notequals(unit($0), $1) }
     infix (Ord) ("!=", (AC,B), (AC,MVar(B)) :: MBoolean) implements redirect ${ forge_notequals(unit($0), readVar($1)) }
 
-    infix (Ord) ("min", List(A withBound TOrdering), List(A,A) :: A) implements (codegen($cala, quotedArg(0) + " min " + quotedArg(1)))
-    infix (Ord) ("max", List(A withBound TOrdering), List(A,A) :: A) implements (codegen($cala, quotedArg(0) + " max " + quotedArg(1)))
+    val min = infix (Ord) ("min", List(A withBound TOrdering), List(A,A) :: A)
+    val max = infix (Ord) ("max", List(A withBound TOrdering), List(A,A) :: A)
+    impl (min) (codegen($cala, quotedArg(0) + " min " + quotedArg(1)))
+    impl (max) (codegen($cala, quotedArg(0) + " max " + quotedArg(1)))
+    for (g <- List(cuda,cpp)) {
+      impl (min) (codegen(g, quotedArg(0) + " < " + quotedArg(1) + "?" + quotedArg(0) + ":" + quotedArg(1)))
+      impl (max) (codegen(g, quotedArg(0) + " > " + quotedArg(1) + "?" + quotedArg(0) + ":" + quotedArg(1)))
+    }
     //infix (Ord) ("compare", List(A withBound TOrdering), List(A,A) :: MInt) implements (codegen($cala, quotedArg(0) + " compare " + quotedArg(1)))
     val lt = infix (Ord) ("<", List(A withBound TOrdering), List(A,A) :: MBoolean)
     val lte = infix (Ord) ("<=", List(A withBound TOrdering), List(A,A) :: MBoolean)
@@ -579,8 +585,12 @@ trait ScalaOps extends PrimitiveMathGen {
     // impl (hashmap) (codegen(cpp, ${ new std::map<$t[K],$t[V]>() }))
 
     compiler (HashMapOps) ("shashmap_from_arrays", (K,V), (MArray(K),MArray(V)) :: SHashMap(K,V), effect = mutable) implements codegen($cala, ${ scala.collection.mutable.HashMap($0.zip($1): _*) })
-    compiler (HashMapOps) ("shashmap_keys_array", (K,V), (SHashMap(K,V)) :: SArray(K)) implements codegen($cala, ${ $0.keys.toArray })
-    compiler (HashMapOps) ("shashmap_values_array", (K,V), (SHashMap(K,V)) :: SArray(V)) implements codegen($cala, ${ $0.values.toArray })
+    val keys_array = compiler (HashMapOps) ("shashmap_keys_array", (K,V), (SHashMap(K,V)) :: SArray(K))
+    val values_array = compiler (HashMapOps) ("shashmap_values_array", (K,V), (SHashMap(K,V)) :: SArray(V))
+    impl (keys_array) (codegen($cala, ${ $0.keys.toArray }))
+    impl (values_array) (codegen($cala, ${ $0.values.toArray }))
+    // impl (keys_array) (codegen(cpp, "new " + unquotes("remap(sym.tp)") + ${ ($0->size()); int keys_idx_$0 = 0; for(std::map<$t[K],$t[V]>::iterator it = $0->begin(); it != $0->end(); ++it) } + unquotes("quote(sym)") + ${->update(keys_idx_$0++, it->first); }))
+    // impl (values_array) (codegen(cpp, "new " + unquotes("remap(sym.tp)") + ${ ($0->size()); int values_idx_$0 = 0; for(std::map<$t[K],$t[V]>::iterator it = $0->begin(); it != $0->end(); ++it) } + unquotes("quote(sym)") + ${->update(values_idx_$0++, it->second); }))
 
     val apply = infix (HashMapOps) ("apply", (K,V), (SHashMap(K,V), K) :: V)
     val update = infix (HashMapOps) ("update", (K,V), (SHashMap(K,V), K, V) :: MUnit, effect = write(0))

@@ -3,11 +3,9 @@ package optiml.compiler.datastruct.scala
 import java.io.{File,BufferedReader,FileReader,PrintWriter,BufferedWriter,FileWriter}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
+
 import org.iq80.leveldb._
 import org.fusesource.leveldbjni.JniDBFactory._
-import annotation.meta.beanGetter
-import beans.BeanProperty
-import com.amazonaws.services.dynamodbv2.datamodeling._
 import java.nio.ByteBuffer
 import ppl.delite.runtime.Config
 

@@ -9,6 +9,7 @@ import stat
 import math
 import fileinput
 
+DELITE_HOME = os.getenv("DELITE_HOME")
 FORGE_HOME = os.getenv("FORGE_HOME")
 FORGE_GENERATED = "build" # TODO
 SCALA_MAJOR_VERS = "2.11"
@@ -69,12 +70,11 @@ object ${dslName}Build extends Build {
     organization := "stanford-ppl",
     scalaOrganization := "org.scala-lang.virtualized",
     scalaVersion := virtScala,
-    scalaHome := sys.env.get("SCALA_VIRTUALIZED_HOME").map(file),
 
     publishArtifact in (Compile, packageDoc) := false,
     // needed for scala.tools, which is apparently not included in sbt's built in version
-    libraryDependencies += "org.scala-lang.virtualized" % "scala-library" % virtScala,
-    libraryDependencies += "org.scala-lang.virtualized" % "scala-compiler" % virtScala,
+    libraryDependencies += "org.scala-lang" % "scala-library" % virtScala,
+    libraryDependencies += "org.scala-lang" % "scala-compiler" % virtScala,
     libraryDependencies += "org.scalatest" % "scalatest_${scala_major_vers}" % "2.2.2",
     libraryDependencies += "com.google.guava" % "guava" % "17.0",
     libraryDependencies += "org.apache.commons" % "commons-math" % "2.2",
@@ -261,6 +261,7 @@ def publish_dsl_extern(dsl, build_dir, scratch_dir, final_name):
         os.system("rsync -r " + tmp_dest + " " + build_dir)
 
 def publish(dsl, opts):
+    global DELITE_HOME
     global FORGE_HOME
     global FORGE_GENERATED
 
@@ -324,7 +325,14 @@ def publish(dsl, opts):
 
         shutil.copyfile(FORGE_HOME + "/static/delitecommon-wrapper.py", build_dir+"/bin/delitecommon.py")
 
+        cp_executable_script(DELITE_HOME + "/bin/delitep", build_dir + "/bin/delitep")
+        cp_executable_script(DELITE_HOME + "/bin/server.py", build_dir + "/bin/server.py")
+
     print "[forge]: Publishing complete."
+
+def cp_executable_script(src, dst):
+    shutil.copyfile(src, dst)
+    os.chmod(dst, stat.S_IXUSR | os.stat(dst)[stat.ST_MODE])
 
 if __name__ == "__main__":
     main()

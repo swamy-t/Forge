@@ -290,14 +290,14 @@ trait SparseMatrixOps {
        */
       infix ("finish") (Nil :: SparseMatrix(T)) implements composite ${ coo_to_csr($self) }
 
-      compiler ("coo_to_csr") (Nil :: SparseMatrix(T)) implements single ${
+      compiler ("coo_to_csr") (Nil :: SparseMatrix(T)) implements composite ${
         if (coo_ordered($self, $self.nnz, sparsematrix_coo_rowindices($self),sparsematrix_coo_colindices($self)))
           coo_to_csr_ordered($self)
         else
           coo_to_csr_unordered($self)
       }
 
-      compiler ("coo_ordered") ((("nnz",MInt),("rowIndices",MArray(MInt)),("colIndices",MArray(MInt))) :: MBoolean) implements single ${
+      compiler ("coo_ordered") ((("nnz",MInt),("rowIndices",MArray(MInt)),("colIndices",MArray(MInt))) :: MBoolean) implements composite ${
         var i = 0
         var lastRow = 0
         var lastCol = 0
@@ -314,7 +314,7 @@ trait SparseMatrixOps {
         !outOfOrder
       }
 
-      compiler ("coo_to_csr_ordered") (Nil :: SparseMatrix(T)) implements single ${
+      compiler ("coo_to_csr_ordered") (Nil :: SparseMatrix(T)) implements composite ${
         val data = sparsematrix_coo_data($self)
         val rowIndices = sparsematrix_coo_rowindices($self)
         val colIndices = sparsematrix_coo_colindices($self)
@@ -334,7 +334,7 @@ trait SparseMatrixOps {
         coo_to_csr_finalize($self,outData,outColIndices,outRowPtr,$self.nnz)
       }
 
-      compiler ("coo_to_csr_unordered") (Nil :: SparseMatrix(T)) implements single ${
+      compiler ("coo_to_csr_unordered") (Nil :: SparseMatrix(T)) implements composite ${
         val data = sparsematrix_coo_data($self)
         val rowIndices = sparsematrix_coo_rowindices($self)
         val colIndices = sparsematrix_coo_colindices($self)
@@ -898,6 +898,22 @@ trait SparseMatrixOps {
       infix ("*:*") (SparseMatrix(T) :: SparseMatrix(T), TArith(T)) implements composite ${ zipMatrixIntersect[T,T,T]($self, $1, (a,b) => a*b) }
       infix ("*:*") (DenseMatrix(T) :: DenseMatrix(T), TArith(T)) implements composite ${ $self.toDense * $1 }
       infix ("*") (T :: SparseMatrix(T), TArith(T)) implements composite ${ $self.mapnz(e => e*$1) }
+      infix ("*") (DenseVector(T) :: DenseVector(T), TArith(T)) implements composite ${
+        if ($self.numCols != $1.length || $1.isRow) fatal("dimension mismatch: matrix * vector")
+        $self.mapRowsToDenseVector { row => row *:* $1 } 
+      }
+
+      infix ("*") (DenseMatrix(T) :: DenseMatrix(T), TArith(T)) implements composite ${
+        fassert($self.numCols == $1.numRows, "dimension mismatch: matrix multiply (lhs: " + $self.makeDimsStr + ", rhs: " + $1.makeDimsStr + ")")
+        // naive
+        if ($self.numRows == 0) DenseMatrix[T]()
+        else {
+          var z = $self // manual guard against code motion
+          (0::z.numRows, *) { i =>
+            $1.mapColsToVector { c => z(i) *:* c }
+          }
+        }
+      }
 
       infix ("*") (DenseMatrix(T) :: DenseMatrix(T), TArith(T)) implements composite ${
         fassert($self.numCols == $1.numRows, "dimension mismatch: matrix multiply (lhs: " + $self.makeDimsStr + ", rhs: " + $1.makeDimsStr + ")")
@@ -985,6 +1001,10 @@ trait SparseMatrixOps {
       infix ("mapRowsToVector") ((SparseVectorView(T) ==> R) :: SparseVector(R), addTpePars = R) implements composite ${
         SparseVector.fromFunc($self.numRows, false, $self.nzRows, i => $1($self(i)))
       }
+
+      infix ("mapRowsToDenseVector") ((SparseVectorView(T) ==> R) :: DenseVector(R), addTpePars = R) implements composite ${
+         IndexVector(0, $self.numRows, false).map(i => $1($self.getRow(i)))
+       }
 
       infix ("mapColsToVector") ((SparseVectorView(T) ==> R) :: SparseVector(R), addTpePars = R) implements composite ${
         SparseVector.fromFunc($self.numCols, true, $self.nzCols, i => $1($self.getCol(i)))

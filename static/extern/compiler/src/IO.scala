@@ -26,11 +26,6 @@ trait InputOutputOpsExp extends DeliteFileReaderOpsExp with DeliteFileWriterOpsE
     DeliteFileReader.readLinesChunk[A](stream)(offset, numBytes)(f)
   }
 
-  def forge_filewriter_writelines(path: Rep[String], numLines: Rep[Int], append: Rep[Boolean], f: Rep[Int] => Rep[String])(implicit ctx: SourceContext): Rep[Unit] = {
-    DeliteFileWriter.writeLines(path, numLines, append)(f)
-  }
-
-
   def forge_fileinputstream_new(path: Rep[String])(implicit ctx: SourceContext): Rep[ForgeFileInputStream] = {
     dfis_new_effectful(Seq(path))
   }
@@ -45,6 +40,10 @@ trait InputOutputOpsExp extends DeliteFileReaderOpsExp with DeliteFileWriterOpsE
 
   def forge_fileinputstream_close(stream: Rep[ForgeFileInputStream])(implicit ctx: SourceContext): Rep[Unit] = {
     dfis_close(stream)
+  }
+
+  def forge_filewriter_writelines(path: Rep[String], numLines: Rep[Int], append: Rep[Boolean], f: Rep[Int] => Rep[String])(implicit ctx: SourceContext): Rep[Unit] = {
+    DeliteFileWriter.writeLines(path, numLines, append)(f)
   }
 
 

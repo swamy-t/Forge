@@ -182,7 +182,7 @@ trait MatrixOps {
        // naive
        if ($self.numRows == 0) DenseMatrix[T]()
        else {
-         var z = $self
+         var z = $self // manual guard against code motion
          (0::z.numRows, *) { i =>
            $1.mapColsToVector { c => z(i) *:* c }
          }
@@ -238,8 +238,8 @@ trait MatrixOps {
      infix ("maxRows") (Nil :: DenseVector(T), O ::: H) implements composite ${ $self.mapRowsToVector { row => max(row) }}
      infix ("maxCols") (Nil :: DenseVector(T), O ::: H) implements composite ${ $self.mapColsToVector { col => max(col) }}
 
-     infix ("min") (Nil :: T, O ::: H) implements reduce(T, 0, MinT, ${ (a,b) => if (a < b) a else b })
-     infix ("max") (Nil :: T, O ::: H) implements reduce(T, 0, MaxT, ${ (a,b) => if (a > b) a else b })
+     infix ("min") (Nil :: T, O ::: H) implements reduce(T, 0, MaxT, ${ (a,b) => if (a < b) a else b })
+     infix ("max") (Nil :: T, O ::: H) implements reduce(T, 0, MinT, ${ (a,b) => if (a > b) a else b })
 
      // TODO: switch to reduce when TupleReduce is generalized
      infix ("minIndex") (Nil :: Tuple2(MInt,MInt), O) implements composite ${

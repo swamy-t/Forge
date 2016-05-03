@@ -156,7 +156,6 @@ trait BasicMathOps {
       v map { e => normalizeStdScalarUsing(e, avg, stddev) }
     }
 
-
     // -- other math ops
     direct (Math) ("sigmoid", Nil, MDouble :: MDouble) implements composite ${ 1.0 / (1.0 + exp(-$0)) }
 

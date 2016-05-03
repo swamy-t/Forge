@@ -1,12 +1,8 @@
 package optiml.library
 
-import scala.collection.JavaConverters._
-import annotation.meta.beanGetter
-import beans.BeanProperty
-import com.amazonaws.services.dynamodbv2.datamodeling._
-import java.nio.ByteBuffer
 import java.io.{File,BufferedReader,FileReader,PrintWriter,BufferedWriter,FileWriter}
 import java.util.HashMap
+import scala.collection.JavaConverters._
 
 /*
  * Global values used by the interpreter.

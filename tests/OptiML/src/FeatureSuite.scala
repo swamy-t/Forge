@@ -49,7 +49,7 @@ trait Unique2 extends ForgeTestModule with OptiMLApplication {
     val names = (0::1000) { i => "hello_" + i }
     val next = (0::1000) { i => unique("new_" + i) }
     val reverseIds = (0::1000) { i => reverseUnique(i) }
-    collect(names == reverseIds)
+    collect(names.sort == reverseIds.sort)
 
     dumpUniqueMappings("test_unique_db")
     mkReport
@@ -80,17 +80,12 @@ trait Indicator extends ForgeTestModule with OptiMLApplication {
 
 class FeatureSuiteInterpreter extends ForgeSuiteInterpreter {
   def testDateTimeOps() { runTest(DateTimeRunnerI) }
-  def testUniqueOps() {
-    runTest(UniqueRunnerI)
-    runTest(Unique2RunnerI)
-  }
+  def testUniqueOps() { runTests(UniqueRunnerI, Unique2RunnerI) }
   def testIndicatorOps() { runTest(IndicatorRunnerI) }
 }
 class FeatureSuiteCompiler extends ForgeSuiteCompiler {
+  override def enforceFullCoverage = false
   def testDateTimeOps() { runTest(DateTimeRunnerC) }
-  def testUniqueOps() {
-    runTest(UniqueRunnerC)
-    runTest(Unique2RunnerC)
-  }
+  def testUniqueOps() { runTests(UniqueRunnerC, Unique2RunnerC) }
   def testIndicatorOps() { runTest(IndicatorRunnerC) }
 }

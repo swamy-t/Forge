@@ -87,7 +87,7 @@ trait NodeDataTest extends ForgeTestModule with OptiGraphApplication {
       }
       collect(count == size-1)
     }
-    
+
     nodeData.close()
     mkReport
   }
@@ -100,6 +100,7 @@ class GraphSuiteInterpreter extends ForgeSuiteInterpreter {
 }
 
 class GraphSuiteCompiler extends ForgeSuiteCompiler {
+  override def enforceFullCoverage = false
   def testUndirectedGraph() { runTest(UndirectedGraphC) }
   def testDirectedGraph() { runTest(DirectedGraphC) }
   def testNodeData(){ runTest(NodeDataC) }

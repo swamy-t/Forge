@@ -56,14 +56,6 @@ trait InputOutputWrapper extends HUMAN_DSL_NAMEBase {
     out.toArray
   }
 
-  def forge_filewriter_writelines(path: Rep[String], numLines: Rep[Int], append: Rep[Boolean], f: Rep[Int] => Rep[String])(implicit ctx: SourceContext): Rep[Unit] = {
-    val output = forge_fileoutputstream_new(path, append)
-    for (i <- 0 until numLines) {
-      forge_fileoutputstream_writeline(output, f(i))
-    }
-    forge_fileoutputstream_close(output)
-  }
-
   def forge_fileinputstream_new(path: Rep[String])(implicit ctx: SourceContext): Rep[ForgeFileInputStream] = {
     val out = DeliteFileInputStream(Seq(path))
     out.open()
@@ -82,6 +74,13 @@ trait InputOutputWrapper extends HUMAN_DSL_NAMEBase {
     stream.close()
   }
 
+  def forge_filewriter_writelines(path: Rep[String], numLines: Rep[Int], append: Rep[Boolean], f: Rep[Int] => Rep[String])(implicit ctx: SourceContext): Rep[Unit] = {
+    val output = forge_fileoutputstream_new(path, append)
+    for (i <- 0 until numLines) {
+      forge_fileoutputstream_writeline(output, f(i))
+    }
+    forge_fileoutputstream_close(output)
+  }
 
   class ForgeFileOutputStream(val writer: Rep[PrintWriter])
   implicit def forgeOutputStreamManifest = manifest[ForgeFileOutputStream]

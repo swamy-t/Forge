@@ -63,17 +63,9 @@ trait SimpleDelete extends ForgeTestModule with OptiMLApplication with IOSuitePa
 }
 
 class IOSuiteInterpreter extends ForgeSuiteInterpreter {
-  def testSimpleWriteRead() {
-    runTest(SimpleWriteRunnerI)
-    runTest(SimpleReadRunnerI)
-    runTest(SimpleDeleteRunnerI)
-  }
+  def testSimpleWriteRead() { runTests(SimpleWriteRunnerI, SimpleReadRunnerI, SimpleDeleteRunnerI) }
 }
 class IOSuiteCompiler extends ForgeSuiteCompiler {
-  def testSimpleWriteRead() {
-    runTest(SimpleWriteRunnerC)
-    runTest(SimpleReadRunnerC)
-    runTest(SimpleDeleteRunnerC)
-  }
+  override def enforceFullCoverage = false
+  def testSimpleWriteRead() { runTests(SimpleWriteRunnerC, SimpleReadRunnerC, SimpleDeleteRunnerC) }
 }
-

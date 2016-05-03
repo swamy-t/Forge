@@ -230,7 +230,6 @@ trait FeatureOps {
       MLGlobal.dumpUniqueMappings($0)
     })
 
-
     // -- DynamoDB-based unique map
     // Caution: experimental feature. See comments in MLGlobalDynamo.scala.
 
