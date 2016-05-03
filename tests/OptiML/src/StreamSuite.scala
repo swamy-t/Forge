@@ -340,25 +340,6 @@ trait HashStreamDelete extends ForgeTestModule with OptiMLApplication with Strea
   }
 }
 
-object HashStreamDeleteRunnerC extends OptiMLApplicationCompiler with ForgeTestRunnerCompiler with HashStreamDelete
-object HashStreamDeleteRunnerI extends OptiMLApplicationInterpreter with ForgeTestRunnerInterpreter with HashStreamDelete
-trait HashStreamDelete extends ForgeTestModule with OptiMLApplication with StreamSuitePaths {
-  def main() = {
-    deleteFile(testMat)
-    deleteFile(testMat2)
-    deleteFile(testHash1)
-    deleteFile(testHash2)
-    deleteFile(testHashStreamMat)
-    deleteFile(testHashInMemMat)
-    if (runAWSTests) {
-      deleteFile(testDHashStreamMat)
-    }
-
-    collect(true)
-    mkReport
-  }
-}
-
 class StreamSuiteInterpreter extends ForgeSuiteInterpreter {
   def testStreamForeach() { runTest(StreamForeachRunnerI) }
   def testStreamCorrectSmall() { runTest(StreamCorrectSmallRunnerI) }

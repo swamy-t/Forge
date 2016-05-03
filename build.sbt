@@ -8,8 +8,6 @@ scalaOrganization := "org.scala-lang.virtualized"
 
 scalaVersion := virtScala
 
-scalaHome := sys.env.get("SCALA_VIRTUALIZED_HOME").map(file)
-
 scalaSource in Compile <<= baseDirectory(_ / "src")
 
 scalaSource in Test <<= baseDirectory(_ / "test-src")
