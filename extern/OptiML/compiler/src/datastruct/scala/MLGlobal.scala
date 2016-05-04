@@ -96,7 +96,7 @@ object MLGlobal {
    * want the natural (integer) ordering. This allows us to quickly retrieve the last id
    * stored in the DB, which is necessary to initialize our state.
    */
-  private val intComparator = new DBComparator() {
+  private def intComparator = new DBComparator() {
     def compare(key1: Array[Byte], key2: Array[Byte]): Int ={
       bytesToInt(key1).compareTo(bytesToInt(key2))
     }
@@ -129,5 +129,6 @@ object MLGlobal {
     identifierDB = null
     reverseIdentifierDB.close()
     reverseIdentifierDB = null
+    nextId = null
   }
 }

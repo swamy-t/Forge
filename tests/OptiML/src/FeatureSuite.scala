@@ -74,6 +74,10 @@ trait Indicator extends ForgeTestModule with OptiMLApplication {
     collect(totals1(3) == 500)
     collect(totals1(9) == 500)
     collect(totals1.sum == 1000)
+
+    val names = my_feature.names
+    collect(names == DenseVector("0","1","2","3","4","5","6","7","8","9"))
+
     mkReport
   }
 }

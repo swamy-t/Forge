@@ -55,6 +55,19 @@ trait FeatureOps {
         if (featureMap.contains($1)) featureMap($1).toDouble else 0.0
       }
 
+      // Return the names associated with this DiscreteFeature in the same order as the
+      // indicator vector.
+      infix("names") (Nil :: DenseVector(MString)) implements composite ${
+        val featureMap = getFeatures($self)
+        val keys = DenseVector(fhashmap_keys(featureMap), true)
+        val values = DenseVector(fhashmap_values(featureMap), true)
+
+        // In our typical implementation, the values should remain sorted from construction,
+        // but we explicitly sort here so that we don't rely on that assumption.
+        val (sortedValues, sortedIndices) = values.sortWithIndex
+        keys(sortedIndices)
+      }
+
       // convert this feature value into an indicator or dummy variable encoding
       // note that if the desired string is not one of the allowed values of the discrete feature,
       // we indicate element 0 (thus possibly overcounting element 0). therefore, element 0 in the
@@ -115,6 +128,14 @@ trait FeatureOps {
       new org.joda.time.DateTime($0.toLong)
     })
 
+    compiler (DateFeature) ("dt_internal_now", Nil, Nil :: SDateTime) implements codegen($cala, ${
+      org.joda.time.DateTime.now()
+    })
+
+    compiler (DateFeature) ("dt_internal_get_millis", Nil, SDateTime :: MLong) implements codegen($cala, ${
+      $0.getMillis()
+    })
+
     compiler (DateFeature) ("dt_internal_year", Nil, SDateTime :: MInt) implements codegen($cala, ${
       $0.getYear()
     })
@@ -147,7 +168,20 @@ trait FeatureOps {
       org.joda.time.Years.yearsBetween($0.toLocalDate(), $1.toLocalDate()).getYears()
     })
 
+    compiler (DateFeature) ("dt_internal_is_before", Nil, (SDateTime, SDateTime) :: MBoolean) implements codegen($cala, ${
+      $0.isBefore($1)
+    })
+
+    compiler (DateFeature) ("dt_internal_is_after", Nil, (SDateTime, SDateTime) :: MBoolean) implements codegen($cala, ${
+      $0.isAfter($1)
+    })
+
     // User-facing DateTime operations.
+
+    static (DateFeature) ("now", Nil, Nil :: MDouble) implements composite ${
+      val dt = dt_internal_now()
+      dt_internal_get_millis(dt).toDouble
+    }
 
     static (DateFeature) ("year", Nil, MDouble :: MInt) implements composite ${
       val dt = dt_internal($0)
@@ -186,6 +220,14 @@ trait FeatureOps {
 
     static (DateFeature) ("yearsBetween", Nil, (MDouble, MDouble) :: MInt) implements composite ${
       dt_internal_years_between(dt_internal($0), dt_internal($1))
+    }
+
+    static (DateFeature) ("isBefore", Nil, (MDouble, MDouble) :: MBoolean) implements composite ${
+      dt_internal_is_before(dt_internal($0), dt_internal($1))
+    }
+
+    static (DateFeature) ("isAfter", Nil, (MDouble, MDouble) :: MBoolean) implements composite ${
+      dt_internal_is_after(dt_internal($0), dt_internal($1))
     }
   }
 

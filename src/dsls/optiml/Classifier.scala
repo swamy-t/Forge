@@ -113,6 +113,7 @@ trait ClassifierOps {
         ("data",TS(MDouble,MBoolean)),
         ("stochastic", MBoolean, "unit(true)"),
         ("initLearningRate", MDouble, "unit(1.0)"),
+        ("minIter", MInt, "unit(1)"),
         ("maxIter", MInt, "unit(30)"),
         ("lambda", MDouble, "unit(0.0)"),
         ("verbose", MBoolean, "unit(false)"),
@@ -122,12 +123,13 @@ trait ClassifierOps {
       val theta = DenseVector.zeros(data.numFeatures)
       val y = data.labels map { label => if (label) 1.0 else 0.0 }
 
+      val _minIter = minIter
       val _maxIter = maxIter
       val _verbose = verbose
 
       // gradient descent with logistic function
       if (stochastic) {
-        untilconverged(theta, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
+        untilconverged(theta, minIter = _minIter, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
           val alpha = initLearningRate / (1.0 + initLearningRate*iter)
           val next = cur.mutable
           for (i <- 0 until data.numSamples) {
@@ -140,7 +142,7 @@ trait ClassifierOps {
         }
       }
       else {
-        untilconverged(theta, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
+        untilconverged(theta, minIter = _minIter, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
           // the adaptive rate does not seem to work as well for batch
           // val alpha = initLearningRate / (1.0 + initLearningRate*iter)
           val alpha = initLearningRate
@@ -166,6 +168,7 @@ trait ClassifierOps {
         ("data",SparseTrainingSet(MDouble,MBoolean)),
         ("stochastic", MBoolean, "unit(true)"),
         ("initLearningRate", MDouble, "unit(1.0)"),
+        ("minIter", MInt, "unit(1)"),
         ("maxIter", MInt, "unit(30)"),
         ("lambda", MDouble, "unit(0.0)"),
         ("verbose", MBoolean, "unit(false)"),
@@ -175,6 +178,7 @@ trait ClassifierOps {
       val theta = SparseVector.zeros(data.numFeatures)
       val y = data.labels map { label => if (label) 1.0 else 0.0 }
 
+      val _minIter = minIter
       val _maxIter = maxIter
       val _verbose = verbose
       val lastUpdated = DenseVector[Int](data.numFeatures, true)
@@ -182,7 +186,7 @@ trait ClassifierOps {
 
       // Sparse gradient descent with logistic function
       if (stochastic) {
-        untilconverged(theta, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
+        untilconverged(theta, minIter = _minIter, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
           val alpha = initLearningRate / (1.0 + initLearningRate*iter)
           var next = cur
 
@@ -239,7 +243,7 @@ trait ClassifierOps {
         // DenseVector of SparseVectors here
         fatal("Batch gradient descent is not yet supported with sparseLogreg")
 
-        untilconverged(theta, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
+        untilconverged(theta, minIter = _minIter, maxIter = _maxIter, verbose = _verbose) { (cur, iter) =>
           val alpha = initLearningRate / (1.0 + initLearningRate*iter)
 
           val gradient = SparseVector.zeros(10)
