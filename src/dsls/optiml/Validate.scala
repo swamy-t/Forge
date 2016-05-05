@@ -346,5 +346,10 @@ trait ValidateOps {
     direct (Validate) ("fscore", Nil, DenseMatrix(MInt) :: MDouble) implements composite ${
       2.0 / ((1.0 / precision($0)) + (1.0 / recall($0)))
     }
+
+    // Balanced error rate (BER). Mean of FPR and FNR.
+    direct (Validate) ("ber", Nil, DenseMatrix(MInt) :: MDouble) implements composite ${
+      (fpr($0) + fnr($0)) / 2.0
+    }
   }
 }
