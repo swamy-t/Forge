@@ -164,39 +164,39 @@ trait TreeOps {
 
       val newIsLeaf = array_empty[Boolean](n)
       array_copy(tree.isLeaf, 0, newIsLeaf, 0, $tree.numNodes)
-      tree.set_is_leaf(newIsLeaf)
+      tree.set_is_leaf(newIsLeaf.unsafeImmutable)
 
       val newLeftChildren = array_empty[Int](n)
       array_copy(tree.leftChildren, 0, newLeftChildren, 0, $tree.numNodes)
-      tree.set_left_children(newLeftChildren)
+      tree.set_left_children(newLeftChildren.unsafeImmutable)
 
       val newRightChildren = array_empty[Int](n)
       array_copy(tree.rightChildren, 0, newRightChildren, 0, $tree.numNodes)
-      tree.set_right_children(newRightChildren)
+      tree.set_right_children(newRightChildren.unsafeImmutable)
 
       val newFeature = array_empty[Int](n)
       array_copy(tree.feature, 0, newFeature, 0, $tree.numNodes)
-      tree.set_feature(newFeature)
+      tree.set_feature(newFeature.unsafeImmutable)
 
       val newThreshold = array_empty[Double](n)
       array_copy(tree.threshold, 0, newThreshold, 0, $tree.numNodes)
-      tree.set_threshold(newThreshold)
+      tree.set_threshold(newThreshold.unsafeImmutable)
 
       val newValue = array_empty[Double](n)
       array_copy(tree.value, 0, newValue, 0, $tree.numNodes)
-      tree.set_value(newValue)
+      tree.set_value(newValue.unsafeImmutable)
 
       val newProb = array_empty[Double](n)
       array_copy(tree.prob, 0, newProb, 0, $tree.numNodes)
-      tree.set_prob(newProb)
+      tree.set_prob(newProb.unsafeImmutable)
 
       val newImpurity = array_empty[Double](n)
       array_copy(tree.impurity, 0, newImpurity, 0, $tree.numNodes)
-      tree.set_impurity(newImpurity)
+      tree.set_impurity(newImpurity.unsafeImmutable)
 
       val newNumNodeSamples = array_empty[Int](n)
       array_copy(tree.numNodeSamples, 0, newNumNodeSamples, 0, $tree.numNodes)
-      tree.set_num_node_samples(newNumNodeSamples)
+      tree.set_num_node_samples(newNumNodeSamples.unsafeImmutable)
 
       tree.set_capacity(n)
     }
