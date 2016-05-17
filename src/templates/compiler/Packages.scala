@@ -91,6 +91,7 @@ trait DeliteGenPackages extends BaseGenPackages {
 
     if (OpsGrp.keySet.exists(_.name == "Misc")) {
       stream.println("  override def misc_unsafeimmutable[A:Manifest](lhs: Rep[A])(implicit pos: SourceContext): Rep[A] = delite_unsafe_immutable(lhs)")
+      stream.println("  override def misc_unsafemutable[A:Manifest](lhs: Rep[A])(implicit pos: SourceContext): Rep[A] = delite_unsafe_mutable(lhs)")
       stream.println("  override def __whileDo(cond: => Exp[Boolean], body: => Rep[Unit])(implicit pos: SourceContext) = delite_while(cond, body)")
       // delite and lms if-then-else don't use by-name-parameter for cond
       stream.println("  override def __ifThenElse[T:Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit ctx: SourceContext) = delite_ifThenElse(cond, thenp, elsep, false, true)")
