@@ -112,20 +112,20 @@ trait FeatureOps {
       org.joda.time.format.DateTimeFormat.forPattern($0)
     })
 
-    infix (DateFeature) ("apply", Nil, (SDateFormat, MString) :: MDouble) implements codegen($cala, ${
+    infix (DateFeature) ("apply", Nil, (SDateFormat, MString) :: MLong) implements codegen($cala, ${
       try {
-        $0.parseMillis($1).toDouble
+        $0.parseMillis($1)
       }
       catch {
-        case e => 0.0 // defaults to 1970, for better or worse... what else can we do?
+        case e => 0L // defaults to 1970, for better or worse... what else can we do?
       }
     })
 
     // Internal DateTime operations. These are factored into separate methods so we don't
     // need to create multiple DateTime instances at run-time and can still define our own API.
 
-    compiler (DateFeature) ("dt_internal", Nil, MDouble :: SDateTime) implements codegen($cala, ${
-      new org.joda.time.DateTime($0.toLong)
+    compiler (DateFeature) ("dt_internal", Nil, MLong :: SDateTime) implements codegen($cala, ${
+      new org.joda.time.DateTime($0)
     })
 
     compiler (DateFeature) ("dt_internal_now", Nil, Nil :: SDateTime) implements codegen($cala, ${
@@ -178,55 +178,55 @@ trait FeatureOps {
 
     // User-facing DateTime operations.
 
-    static (DateFeature) ("now", Nil, Nil :: MDouble) implements composite ${
+    static (DateFeature) ("now", Nil, Nil :: MLong) implements composite ${
       val dt = dt_internal_now()
-      dt_internal_get_millis(dt).toDouble
+      dt_internal_get_millis(dt)
     }
 
-    static (DateFeature) ("year", Nil, MDouble :: MInt) implements composite ${
+    static (DateFeature) ("year", Nil, MLong :: MInt) implements composite ${
       val dt = dt_internal($0)
       dt_internal_year(dt)
     }
 
-    static (DateFeature) ("month", Nil, MDouble :: MInt) implements composite ${
+    static (DateFeature) ("month", Nil, MLong :: MInt) implements composite ${
       val dt = dt_internal($0)
       dt_internal_month(dt)
     }
 
-    static (DateFeature) ("hour", Nil, MDouble :: MInt) implements composite ${
+    static (DateFeature) ("hour", Nil, MLong :: MInt) implements composite ${
       val dt = dt_internal($0)
       dt_internal_hour(dt)
     }
 
-    static (DateFeature) ("day", Nil, MDouble :: MInt) implements composite ${
+    static (DateFeature) ("day", Nil, MLong :: MInt) implements composite ${
       val dt = dt_internal($0)
       dt_internal_day(dt)
     }
 
     // Monday is 1, Sunday is 7
     // http://joda-time.sourceforge.net/apidocs/org/joda/time/DateTimeConstants.html
-    static (DateFeature) ("weekday", Nil, MDouble :: MInt) implements composite ${
+    static (DateFeature) ("weekday", Nil, MLong :: MInt) implements composite ${
       val dt = dt_internal($0)
       dt_internal_weekday(dt)
     }
 
-    static (DateFeature) ("daysBetween", Nil, (MDouble, MDouble) :: MInt) implements composite ${
+    static (DateFeature) ("daysBetween", Nil, (MLong, MLong) :: MInt) implements composite ${
       dt_internal_days_between(dt_internal($0), dt_internal($1))
     }
 
-    static (DateFeature) ("monthsBetween", Nil, (MDouble, MDouble) :: MInt) implements composite ${
+    static (DateFeature) ("monthsBetween", Nil, (MLong, MLong) :: MInt) implements composite ${
       dt_internal_months_between(dt_internal($0), dt_internal($1))
     }
 
-    static (DateFeature) ("yearsBetween", Nil, (MDouble, MDouble) :: MInt) implements composite ${
+    static (DateFeature) ("yearsBetween", Nil, (MLong, MLong) :: MInt) implements composite ${
       dt_internal_years_between(dt_internal($0), dt_internal($1))
     }
 
-    static (DateFeature) ("isBefore", Nil, (MDouble, MDouble) :: MBoolean) implements composite ${
+    static (DateFeature) ("isBefore", Nil, (MLong, MLong) :: MBoolean) implements composite ${
       dt_internal_is_before(dt_internal($0), dt_internal($1))
     }
 
-    static (DateFeature) ("isAfter", Nil, (MDouble, MDouble) :: MBoolean) implements composite ${
+    static (DateFeature) ("isAfter", Nil, (MLong, MLong) :: MBoolean) implements composite ${
       dt_internal_is_after(dt_internal($0), dt_internal($1))
     }
   }
