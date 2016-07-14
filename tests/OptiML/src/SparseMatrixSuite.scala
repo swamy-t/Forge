@@ -78,6 +78,34 @@ trait SparseMatrixDataOps extends ForgeTestModule with OptiMLApplication {
   }
 }
 
+object SparseMatrixSortedConstructorRunnerC extends OptiMLApplicationCompiler with ForgeTestRunnerCompiler with SparseMatrixSortedConstructor
+object SparseMatrixSortedConstructorRunnerI extends OptiMLApplicationInterpreter with ForgeTestRunnerInterpreter with SparseMatrixSortedConstructor
+trait SparseMatrixSortedConstructor extends ForgeTestModule with OptiMLApplication {
+  def main() {
+    // Test constructing an ordered SparseMatrix
+    val o1 = SparseMatrix[Boolean](100,100)
+    var i = 0
+    var nnz = 0
+    while (i < o1.numRows) {
+      val z = (DenseVector(i) << shuffle(0::100).take(10).toDense).distinct.sort // include diagonal
+      nnz += z.length
+      var j = 0
+      while (j < z.length) {
+        o1(i, z(j)) = true
+        j += 1
+      }
+      i += 1
+    }
+    collect(o1.isOrdered)
+    val o2 = o1.finish
+    collect(o2.numRows == o1.numRows)
+    collect(o2.numCols == o1.numCols)
+    collect(o2.nnz == nnz)
+
+    mkReport
+  }
+}
+
 object SparseMatrixOperatorsRunnerI extends OptiMLApplicationInterpreter with ForgeTestRunnerInterpreter with SparseMatrixOperators
 object SparseMatrixOperatorsRunnerC extends OptiMLApplicationCompiler with ForgeTestRunnerCompiler with SparseMatrixOperators
 trait SparseMatrixOperators extends ForgeTestModule with OptiMLApplication {
@@ -173,6 +201,7 @@ trait SparseMatrixBulkOps extends ForgeTestModule with OptiMLApplication {
 
 class SparseMatrixSuiteInterpreter extends ForgeSuiteInterpreter {
   def testDataOps() { runTest(SparseMatrixDataOpsRunnerI) }
+  def testSortedConstructor() { runTest(SparseMatrixSortedConstructorRunnerI) }
   def testOperators() { runTest(SparseMatrixOperatorsRunnerI) }
   def testBulkOps() { runTest(SparseMatrixBulkOpsRunnerI) }
 }
@@ -180,6 +209,7 @@ class SparseMatrixSuiteInterpreter extends ForgeSuiteInterpreter {
 class SparseMatrixSuiteCompiler extends ForgeSuiteCompiler {
   cppWhiteList ++= Seq("sortindex_helper")
   def testDataOps() { runTest(SparseMatrixDataOpsRunnerC) }
+  def testSortedConstructor() { runTest(SparseMatrixSortedConstructorRunnerC) }
   def testOperators() { runTest(SparseMatrixOperatorsRunnerC) }
   def testBulkOps() { runTest(SparseMatrixBulkOpsRunnerC) }
 }
