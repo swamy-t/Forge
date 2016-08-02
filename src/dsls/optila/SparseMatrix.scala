@@ -288,6 +288,10 @@ trait SparseMatrixOps {
       /**
        * Conversion to CSR
        */
+      infix ("isOrdered") (Nil :: MBoolean) implements composite ${
+        coo_ordered($self, $self.nnz, sparsematrix_coo_rowindices($self),sparsematrix_coo_colindices($self))
+      }
+
       infix ("finish") (Nil :: SparseMatrix(T)) implements composite ${ coo_to_csr($self) }
 
       compiler ("coo_to_csr") (Nil :: SparseMatrix(T)) implements composite ${
@@ -299,8 +303,8 @@ trait SparseMatrixOps {
 
       compiler ("coo_ordered") ((("nnz",MInt),("rowIndices",MArray(MInt)),("colIndices",MArray(MInt))) :: MBoolean) implements composite ${
         var i = 0
-        var lastRow = 0
-        var lastCol = 0
+        var lastRow = -1
+        var lastCol = -1
         var outOfOrder = false
         while (i < nnz && !outOfOrder) {
           if (rowIndices(i) < lastRow)
@@ -900,7 +904,7 @@ trait SparseMatrixOps {
       infix ("*") (T :: SparseMatrix(T), TArith(T)) implements composite ${ $self.mapnz(e => e*$1) }
       infix ("*") (DenseVector(T) :: DenseVector(T), TArith(T)) implements composite ${
         if ($self.numCols != $1.length || $1.isRow) fatal("dimension mismatch: matrix * vector")
-        $self.mapRowsToDenseVector { row => row *:* $1 } 
+        $self.mapRowsToDenseVector { row => row *:* $1 }
       }
 
       infix ("*") (DenseMatrix(T) :: DenseMatrix(T), TArith(T)) implements composite ${

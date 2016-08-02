@@ -250,10 +250,10 @@ def publish_dsl_extern(dsl, build_dir, scratch_dir, final_name):
             if not os.path.exists(tmp_dest + dest):
                   os.makedirs(tmp_dest + dest)
             os.system("rsync -r " + src + " " + tmp_dest + dest)
-            os.system("rsync -q " + src_root + "*" + " " + tmp_dest + dest_root)
+            os.system("rsync -r " + src_root + "* " + tmp_dest + dest_root + " --exclude=src")
         else:
             os.system("rsync -r " + src + " " + build_dir + "/" + dest)
-            os.system("rsync -q " + src_root + "*" + " " + build_dir + "/" + dest_root)
+            os.system("rsync -r " + src_root + "* " + build_dir + "/" + dest_root + " --exclude=src")
 
     if dsl != final_name:
         # dependencies need to have dsl names remapped
