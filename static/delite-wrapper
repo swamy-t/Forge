@@ -20,8 +20,12 @@ def main():
     DELITE_HOME = delitecommon.DELITE_HOME
 
     cp = ""
-    # add all managed libs 
-    jars = [os.path.join(d,f) for (d, n, fs) in os.walk(script_home + "/lib_managed/") for f in fs]
+
+    # lib directories in precedence order
+    lib_dirs = ["/compiler/lib", "/shared/lib", "/lib_managed"]
+
+    # add all libs
+    jars = [os.path.join(d,f) for base in lib_dirs for (d, n, fs) in os.walk(script_home + base) for f in fs]
     for j in jars:
         cp = cp + j + os.pathsep
 
