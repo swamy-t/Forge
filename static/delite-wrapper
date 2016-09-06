@@ -22,14 +22,14 @@ def main():
     cp = ""
 
     # lib directories in precedence order
-    lib_dirs = ["/compiler/lib", "/shared/lib", "/lib_managed"]
+    lib_dirs = [script_home+"/compiler/lib", script_home+"/shared/lib", script_home+"/lib_managed", DELITE_HOME+"/runtime/lib"]
 
     # add all libs
-    jars = [os.path.join(d,f) for base in lib_dirs for (d, n, fs) in os.walk(script_home + base) for f in fs]
+    jars = [os.path.join(d,f) for base_dir in lib_dirs for (d, n, fs) in os.walk(base_dir) for f in fs]
     for j in jars:
         cp = cp + j + os.pathsep
 
-    # Delite
+    # Delite runtime
     cp = cp + DELITE_HOME + "/runtime/target/" + scala_major_id + "/classes" + os.pathsep
 
     old_cp = os.getenv("CLASSPATH", "")
